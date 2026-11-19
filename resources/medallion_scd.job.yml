@@ -1,0 +1,43 @@
+# Lakeflow Job: orchestrates the pipeline and the cross-table checks.
+#
+#   refresh_pipeline  ──►  data_quality_checks
+#
+# Also prototyped in the UI (Jobs → the job → "View as code" → YAML)
+# and pasted here with the IDs replaced by bundle references.
+resources:
+  jobs:
+    medallion_scd_job:
+      name: medallion_scd_job_${bundle.target}
+
+      schedule:
+        quartz_cron_expression: "0 0 6 * * ?"   # every day at 06:00
+        timezone_id: America/Sao_Paulo
+        pause_status: ${var.schedule_status}
+
+      email_notifications:
+        on_failure:
+          - ${workspace.current_user.userName}
+
+      max_concurrent_runs: 1
+
+      tasks:
+        # 1. Refreshes every table in the pipeline (bronze → silver → gold).
+        - task_key: refresh_pipeline
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.medallion_scd_sdp.id}
+            full_refresh: false
+
+        # 2. Cross-table rules the expectations cannot express.
+        #    Runs only if the pipeline succeeded; fails the job on any violation.
+        - task_key: data_quality_checks
+          depends_on:
+            - task_key: refresh_pipeline
+          environment_key: default
+          spark_python_task:
+            python_file: ../src/data_quality/checks.py
+            parameters: ["--catalog", "${var.catalog}"]
+
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "3"   # serverless environment for Python tasks

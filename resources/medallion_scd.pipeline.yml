@@ -1,0 +1,23 @@
+# Lakeflow Spark Declarative Pipeline.
+#
+# This is the same configuration you set in the pipeline UI
+# (Settings → "View settings YAML" / "View as code"): prototype in the UI,
+# copy the YAML here, replace the hard-coded values with ${var.*}.
+resources:
+  pipelines:
+    medallion_scd_sdp:
+      name: medallion_scd_sdp_${bundle.target}
+      catalog: ${var.catalog}   # default catalog: bronze.x resolves to <catalog>.bronze.x
+      schema: bronze            # default schema for unqualified names
+      serverless: true
+      continuous: false         # triggered: processes what is new, then stops
+      channel: CURRENT
+      configuration:
+        source: ${var.source_path}  # read in the SQL as ${source}
+      libraries:
+        - file:
+            path: ../transformations/01_bronze.sql
+        - file:
+            path: ../transformations/02_silver.sql
+        - file:
+            path: ../transformations/03_gold.sql

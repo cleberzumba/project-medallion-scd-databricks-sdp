@@ -1,0 +1,68 @@
+# =========================================================
+# Declarative Automation Bundle (DAB)
+# ---------------------------------------------------------
+# Everything that gets deployed to Databricks is declared here and in
+# resources/: the pipeline, the job and the code they run.
+#
+#   databricks bundle validate -t dev
+#   databricks bundle deploy   -t dev
+#   databricks bundle run      -t dev medallion_scd_job
+#
+# Same code, three environments. The only thing that changes between
+# targets is the catalog (and, from it, the landing volume).
+# The workspace host comes from the CLI profile or from the
+# DATABRICKS_HOST / DATABRICKS_TOKEN environment variables (GitHub
+# secrets in CI), so no URL or token lives in the repository.
+# =========================================================
+
+bundle:
+  name: medallion_scd_sdp
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog:
+    description: Unity Catalog catalog the pipeline writes to
+    default: medallion_dev
+  source_path:
+    description: Landing volume with the source files
+    default: /Volumes/medallion_dev/landing/raw
+  schedule_status:
+    description: PAUSED or UNPAUSED
+    default: PAUSED
+
+targets:
+
+  # Personal development. Each developer gets their own copy:
+  # resources are prefixed with "[dev <user>]", schedules are paused,
+  # and the pipeline runs in development mode.
+  dev:
+    mode: development
+    default: true
+    variables:
+      catalog: medallion_dev
+      source_path: /Volumes/medallion_dev/landing/raw
+
+  # Pre-production. Deployed and run by CI on every push to main,
+  # before anything reaches production.
+  stage:
+    mode: production
+    workspace:
+      root_path: /Workspace/Shared/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      catalog: medallion_stage
+      source_path: /Volumes/medallion_stage/landing/raw
+
+  # Production. Only the CI pipeline deploys here, after stage passed.
+  prod:
+    mode: production
+    workspace:
+      root_path: /Workspace/Shared/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      catalog: medallion_prod
+      source_path: /Volumes/medallion_prod/landing/raw
+      schedule_status: UNPAUSED
+    # In a company workspace prod runs as a service principal, not as a person:
+    # run_as:
+    #   service_principal_name: <application-id>
